@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  # Serviciul pentru API REST
+  api:
+    build: ./api
+    ports:
+      - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql://user:password@db/mydb
+      - FLASK_ENV=development  # Activează modul de dezvoltare pentru a permite reîncărcarea automată
+    volumes:
+      - ./api:/app  # Montează directorul local în container
+    depends_on:
+      - db
+
+  # Serviciul pentru PostgreSQL
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: mydb
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  # Serviciul pentru pgAdmin
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@example.com   # Adresa de email pentru autentificare
+      - PGADMIN_DEFAULT_PASSWORD=adminpassword   # Parola pentru autentificare
+    ports:
+      - "8081:80"  # Exponerea portului pgAdmin (acesta va fi accesibil pe http://localhost:8081)
+    depends_on:
+      - db
+
+volumes:
+  db_data:
