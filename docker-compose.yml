@@ -8,9 +8,9 @@ services:
       - "5000:5000"
     environment:
       - DATABASE_URL=postgresql://user:password@db/mydb
-      - FLASK_ENV=development  # Activează modul de dezvoltare pentru a permite reîncărcarea automată
+      - FLASK_ENV=development
     volumes:
-      - ./api:/app  # Montează directorul local în container
+      - ./api:/app
     depends_on:
       - db
 
@@ -23,6 +23,7 @@ services:
       POSTGRES_PASSWORD: password
     volumes:
       - db_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql # Rulează scriptul SQL la inițializarea bazei de date
 
   # Serviciul pentru pgAdmin
   pgadmin:
@@ -31,7 +32,7 @@ services:
       - PGADMIN_DEFAULT_EMAIL=admin@example.com   # Adresa de email pentru autentificare
       - PGADMIN_DEFAULT_PASSWORD=adminpassword   # Parola pentru autentificare
     ports:
-      - "8081:80"  # Exponerea portului pgAdmin (acesta va fi accesibil pe http://localhost:8081)
+      - "8081:80"
     depends_on:
       - db
 
