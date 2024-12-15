@@ -1,9 +1,9 @@
 from flask import Flask, jsonify, request
 import psycopg2
+from datetime import datetime
 
 app = Flask(__name__)
 
-# Conectarea la baza de date PostgreSQL
 def get_db_connection():
     conn = psycopg2.connect(
         host='db',
@@ -20,22 +20,19 @@ def hello_world():
 @app.route('/api/countries', methods=['POST'])
 def add_country():
 
-    # Obtinem datele din body-ul cererii
     data = request.get_json()
     
-    # Validam inputul
     if not data or 'nume' not in data or 'lat' not in data or 'lon' not in data:
         return jsonify({"error": "Bad request, missing fields"}), 400
     
-    nume_tara = data['nume']
-    latitudine = data['lat']
-    longitudine = data['lon']
+    nume = data['nume']
+    lat = data['lat']
+    lon = data['lon']
 
     connection = get_db_connection()
     cursor = connection.cursor()
     
-    # Verificam daca tara exista deja (prin nume)
-    cursor.execute('SELECT id FROM tari WHERE nume_tara = %s', (nume_tara,))
+    cursor.execute('SELECT id FROM tari WHERE nume = %s', (nume,))
     existing_country = cursor.fetchone()
     
     if existing_country:
@@ -43,18 +40,16 @@ def add_country():
         connection.close()
         return jsonify({"error": "Conflict: Country already exists"}), 409
 
-    # Adaugam tara in baza de date
     cursor.execute('''
-        INSERT INTO tari (nume_tara, latitudine, longitudine) 
+        INSERT INTO tari (nume, lat, lon) 
         VALUES (%s, %s, %s) RETURNING id
-    ''', (nume_tara, latitudine, longitudine))
+    ''', (nume, lat, lon))
     new_country_id = cursor.fetchone()[0]
     
-    connection.commit()  # Confirmam tranzactia
+    connection.commit()
     cursor.close()
     connection.close()
 
-    # Returnam raspunsul de succes cu ID-ul tarii
     return jsonify({"id": new_country_id}), 201
 
 @app.route('/api/countries', methods=['GET'])
@@ -63,11 +58,9 @@ def get_all_country():
     connection = get_db_connection()
     cursor = connection.cursor()
     
-    # Interogăm baza de date pentru a obține toate țările
-    cursor.execute('SELECT id, nume_tara, latitudine, longitudine FROM tari')
+    cursor.execute('SELECT id, nume, lat, lon FROM tari')
     countries = cursor.fetchall()
     
-    # Creăm un listă de dicționare pentru a structura răspunsul
     countries_list = []
     for country in countries:
         country_data = {
@@ -81,65 +74,57 @@ def get_all_country():
     cursor.close()
     connection.close()
 
-    # Returnăm răspunsul în format JSON
     return jsonify(countries_list), 200
 
-@app.route('/api/countries/', methods=['PUT'])
-def update_country():
+@app.route('/api/countries/<int:id>', methods=['PUT'])
+def update_country(id):
 
     data = request.get_json()
 
     if not data or 'nume' not in data or 'lat' not in data or 'lon' not in data:
         return jsonify({"error": "Bad request, missing fields"}), 400
 
-    nume_tara = data['nume']
-    latitudine = data['lat']
-    longitudine = data['lon']
+    nume = data['nume']
+    lat = data['lat']
+    lon = data['lon']
 
     connection = get_db_connection()
     cursor = connection.cursor()
 
-    id = request.args.get('id')
-
     try:
-        # Check if the country exists
         cursor.execute('SELECT id FROM tari WHERE id = %s', (id,))
         country = cursor.fetchone()
         if not country:
             return jsonify({"error": "Country not found"}), 404
 
-        # Attempt to update the record
         cursor.execute('''
-            UPDATE tari SET nume_tara = %s, latitudine = %s, longitudine = %s
+            UPDATE tari SET nume = %s, lat = %s, lon = %s
             WHERE id = %s
-        ''', (nume_tara, latitudine, longitudine, id))
+        ''', (nume, lat, lon, id))
         connection.commit()
 
     except psycopg2.errors.UniqueViolation as e:
-        # Handle unique constraint violations
         connection.rollback()
         return jsonify({"error": "Unique constraint violation: another country already has this name"}), 409
 
     except Exception as e:
-        # Handle other unexpected exceptions
         connection.rollback()
         return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
 
     finally:
-        # Ensure resources are always closed
         cursor.close()
         connection.close()
 
     return jsonify({"message": "Country updated successfully"}), 200
 
-@app.route('/api/countries/', methods=['DELETE'])
-def delete_country():
+@app.route('/api/countries/<int:id>', methods=['DELETE'])
+def delete_country(id):
     connection = get_db_connection()
     cursor = connection.cursor()
 
-    id = request.args.get('id')
+    cursor.execute('SELECT id FROM tari WHERE id = %s', (id,))
+    country = cursor.fetchone()
 
-    country = cursor.execute('SELECT id FROM tari WHERE id = %s', (id,))
     if not country:
         return jsonify({"error": "Country not found"}), 404
 
@@ -154,18 +139,26 @@ def delete_country():
 def add_city():
     data = request.get_json()
 
-    if not data or 'nume' not in data or 'lat' not in data or 'lon' not in data or 'tara_id' not in data:
+    if not data or 'nume' not in data or 'lat' not in data or 'lon' not in data or 'idTara' not in data:
         return jsonify({"error": "Bad request, missing fields"}), 400
 
-    nume_oras = data['nume']
-    latitudine = data['lat']
-    longitudine = data['lon']
-    tara_id = data['tara_id']
+    nume = data['nume']
+    lat = data['lat']
+    lon = data['lon']
+    idTara = data['idTara']
 
     connection = get_db_connection()
     cursor = connection.cursor()
 
-    cursor.execute('SELECT id FROM tari WHERE id = %s', (tara_id,))
+    cursor.execute('SELECT id FROM orase WHERE nume = %s', (nume,))
+    existing_city = cursor.fetchone()
+
+    if existing_city:
+        cursor.close()
+        connection.close()
+        return jsonify({"error": "Conflict: City already exists"}), 409
+
+    cursor.execute('SELECT id FROM tari WHERE id = %s', (idTara,))
     country = cursor.fetchone()
 
     if not country:
@@ -174,9 +167,9 @@ def add_city():
         return jsonify({"error": "Country not found"}), 404
 
     cursor.execute('''
-        INSERT INTO orase (nume_oras, latitudine, longitudine, tara_id)
+        INSERT INTO orase (nume, lat, lon, idTara)
         VALUES (%s, %s, %s, %s) RETURNING id
-    ''', (nume_oras, latitudine, longitudine, tara_id))
+    ''', (nume, lat, lon, idTara))
     new_city_id = cursor.fetchone()[0]
 
     connection.commit()
@@ -190,7 +183,7 @@ def get_all_city():
     connection = get_db_connection()
     cursor = connection.cursor()
 
-    cursor.execute('SELECT id, nume_oras, latitudine, longitudine, id_tara FROM orase')
+    cursor.execute('SELECT id, nume, lat, lon, idTara FROM orase')
     cities = cursor.fetchall()
 
     cities_list = []
@@ -200,7 +193,7 @@ def get_all_city():
             'nume': city[1],
             'lat': city[2],
             'lon': city[3],
-            'id_tara': city[4]
+            'idTara': city[4]
         }
         cities_list.append(city_data)
 
@@ -209,18 +202,16 @@ def get_all_city():
 
     return jsonify(cities_list), 200
 
-@app.route('/api/cities/country/', methods=['GET'])
-def get_city_by_country():
+@app.route('/api/cities/country/<int:id>', methods=['GET'])
+def get_city_by_country(id):
 
     connection = get_db_connection()
     cursor = connection.cursor()
-
-    id = request.args.get('id')
 
     if id:
-        cursor.execute('SELECT id, nume_oras, latitudine, longitudine, id_tara FROM orase WHERE id_tara = %s', (id,))
+        cursor.execute('SELECT id, nume, lat, lon, idTara FROM orase WHERE idTara = %s', (id,))
     else:
-        cursor.execute('SELECT id, nume_oras, latitudine, longitudine, id_tara FROM orase')
+        cursor.execute('SELECT id, nume, lat, lon, idTara FROM orase')
 
     cities = cursor.fetchall()
 
@@ -231,7 +222,7 @@ def get_city_by_country():
             'nume': city[1],
             'lat': city[2],
             'lon': city[3],
-            'id_tara': city[4]
+            'idTara': city[4]
         }
         cities_list.append(city_data)
 
@@ -240,48 +231,56 @@ def get_city_by_country():
 
     return jsonify(cities_list), 200
 
-@app.route('/api/cities/', methods=['PUT'])
-def update_city():
+@app.route('/api/cities/<int:id>', methods=['PUT'])
+def update_city(id):
     data = request.get_json()
 
-    if not data or 'nume' not in data or 'lat' not in data or 'lon' not in data or 'tara_id' not in data:
+    if not data or 'nume' not in data or 'lat' not in data or 'lon' not in data or 'idTara' not in data:
         return jsonify({"error": "Bad request, missing fields"}), 400
 
-    nume_oras = data['nume']
-    latitudine = data['lat']
-    longitudine = data['lon']
-    tara_id = data['tara_id']
+    nume = data['nume']
+    lat = data['lat']
+    lon = data['lon']
+    idTara = data['idTara']
 
     connection = get_db_connection()
     cursor = connection.cursor()
 
-    id = request.args.get('id')
+    try:
+        cursor.execute('SELECT id FROM orase WHERE id = %s', (id,))
+        city = cursor.fetchone()
+        if not city:
+            return jsonify({"error": "City not found"}), 404
+        
+        cursor.execute('SELECT id FROM tari WHERE id = %s', (idTara,))
+        country = cursor.fetchone()
+        if not country:
+            return jsonify({"error": "Country not found"}), 404
 
-    cursor.execute('SELECT id FROM orase WHERE id = %s', (id,))
-    city = cursor.fetchone()
+        cursor.execute('''
+            UPDATE orase SET nume = %s, lat = %s, lon = %s, idTara = %s
+            WHERE id = %s
+        ''', (nume, lat, lon, idTara, id))
+        connection.commit()
 
-    if not city:
+    except psycopg2.errors.UniqueViolation as e:
+        connection.rollback()
+        return jsonify({"error": "Unique constraint violation: another city already has this name"}), 409
+    
+    except Exception as e:
+        connection.rollback()
+        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+    
+    finally:
         cursor.close()
         connection.close()
-        return jsonify({"error": "City not found"}), 404
-
-    cursor.execute('''
-        UPDATE orase SET nume_oras = %s, latitudine = %s, longitudine = %s, tara_id = %s
-        WHERE id = %s
-    ''', (nume_oras, latitudine, longitudine, tara_id, id))
-
-    connection.commit()
-    cursor.close()
-    connection.close()
 
     return jsonify({"message": "City updated successfully"}), 200
 
-@app.route('/api/cities/', methods=['DELETE'])
-def delete_city():
+@app.route('/api/cities/<int:id>', methods=['DELETE'])
+def delete_city(id):
     connection = get_db_connection()
     cursor = connection.cursor()
-
-    id = request.args.get('id')
 
     cursor.execute('SELECT id FROM orase WHERE id = %s', (id,))
     city = cursor.fetchone()
@@ -302,16 +301,19 @@ def delete_city():
 def add_temperature():
     data = request.get_json()
 
-    if not data or 'id_oras' not in data or 'valoare' not in data:
+    if not data or 'idOras' not in data or 'valoare' not in data:
         return jsonify({"error": "Bad request, missing fields"}), 400
 
-    id_oras = data['id_oras']
+    idOras = data['idOras']
     valoare = data['valoare']
+
+    if not isinstance(valoare, float):
+        return jsonify({"error": "Bad request, invalid value"}), 400
 
     connection = get_db_connection()
     cursor = connection.cursor()
 
-    cursor.execute('SELECT id FROM orase WHERE id = %s', (id_oras,))
+    cursor.execute('SELECT id FROM orase WHERE id = %s', (idOras,))
     city = cursor.fetchone()
 
     if not city:
@@ -320,9 +322,9 @@ def add_temperature():
         return jsonify({"error": "City not found"}), 404
 
     cursor.execute('''
-        INSERT INTO temperaturi (id_oras, valoare)
-        VALUES (%s, %s) RETURNING id
-    ''', (id_oras, valoare))
+        INSERT INTO temperaturi (idOras, valoare, timestamp)
+        VALUES (%s, %s, NOW()) RETURNING id
+    ''', (idOras, valoare))
     new_temperature_id = cursor.fetchone()[0]
 
     connection.commit()
@@ -336,20 +338,58 @@ def get_temperature_by_date():
     connection = get_db_connection()
     cursor = connection.cursor()
 
-    lat = request.args.get('lat')
-    lon = request.args.get('lon')
+    cursor.execute('''
+                    SELECT temperaturi.id, valoare, timestamp, lat, lon FROM temperaturi
+                    JOIN orase ON temperaturi.idOras = orase.id''')
+    temperatures = cursor.fetchall()
+
+    lat = request.args.get('lat', type=float)
+    lon = request.args.get('lon', type=float)
+    from_date = request.args.get('from', type=str)
+    until_date = request.args.get('until', type=str)
+
+    if from_date is not None:
+        from_date = datetime.strptime(from_date, "%Y-%m-%d")
+    if until_date is not None:
+        until_date = datetime.strptime(until_date, "%Y-%m-%d")
+
+    filtered_temperatures = []
+    for temperature in temperatures:
+        temp_id, valoare, temp_timestamp, temp_lat, temp_lon = temperature
+
+        if lat is not None and temp_lat != lat:
+            continue
+        if lon is not None and temp_lon != lon:
+            continue
+        if from_date is not None and temp_timestamp < from_date:
+            continue
+        if until_date is not None and temp_timestamp > until_date:
+            continue
+
+        filtered_temperatures.append({
+            'id': temp_id,
+            'valoare': valoare,
+            'timestamp': temp_timestamp.strftime("%Y-%m-%d"),
+        })
+
+    cursor.close()
+    connection.close()
+
+    return jsonify(filtered_temperatures), 200
+
+@app.route('/api/temperatures/cities/<int:idOras>', methods=['GET'])
+def get_temperature_by_city(idOras):
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
     from_date = request.args.get('from')
     until_date = request.args.get('until')
 
-    cursor.execute('SELECT id, valoare, timestamp, id_oras FROM temperaturi')
+    cursor.execute('SELECT id, valoare, timestamp, idOras FROM temperaturi WHERE idOras = %s', (idOras,))
     temperatures = cursor.fetchall()
 
     new_temperatures = temperatures
 
-    if lat is not None:
-        new_temperatures = [temperature for temperature in new_temperatures if temperature[3] == lat]
-    if lon is not None:
-        new_temperatures = [temperature for temperature in new_temperatures if temperature[3] == lon]
     if from_date is not None:
         new_temperatures = [temperature for temperature in new_temperatures if temperature[2] >= from_date]
     if until_date is not None:
@@ -369,54 +409,20 @@ def get_temperature_by_date():
 
     return jsonify(temperatures_list), 200
 
-@app.route('/api/temperatures/cities/', methods=['GET'])
-def get_temperature_by_city():
+@app.route('/api/temperatures/countries/<int:idTara>', methods=['GET'])
+def get_temperature_by_country(idTara):
     connection = get_db_connection()
     cursor = connection.cursor()
 
-    id_oras = request.args.get('id_oras')
-    from_date = request.args.get('from')
-    until_date = request.args.get('until')
-
-    cursor.execute('SELECT id, valoare, timestamp, id_oras FROM temperaturi WHERE id_oras = %s', (id_oras,))
-    temperatures = cursor.fetchall()
-
-    new_temperatures = temperatures
-
-    if from_date is not None:
-        new_temperatures = [temperature for temperature in new_temperatures if temperature[2] >= from_date]
-    if until_date is not None:
-        new_temperatures = [temperature for temperature in new_temperatures if temperature[2] <= until_date]
-
-    temperatures_list = []
-    for temperature in new_temperatures:
-        temperature_data = {
-            'id': temperature[0],
-            'valoare': temperature[1],
-            'timestamp': temperature[2],
-        }
-        temperatures_list.append(temperature_data)
-
-    cursor.close()
-    connection.close()
-
-    return jsonify(temperatures_list), 200
-
-@app.route('/api/temperatures/countries/', methods=['GET'])
-def get_temperature_by_country():
-    connection = get_db_connection()
-    cursor = connection.cursor()
-
-    id_tara = request.args.get('id_tara')
     from_date = request.args.get('from')
     until_date = request.args.get('until')
 
     cursor.execute('''
-        SELECT temperaturi.id, temperaturi.valoare, temperaturi.timestamp, orase.id_tara
+        SELECT temperaturi.id, temperaturi.valoare, temperaturi.timestamp, orase.idTara
         FROM temperaturi
-        JOIN orase ON temperaturi.id_oras = orase.id
-        WHERE orase.id_tara = %s
-    ''', (id_tara,))
+        JOIN orase ON temperaturi.idOras = orase.id
+        WHERE orase.idTara = %s
+    ''', (idTara,))
     temperatures = cursor.fetchall()
 
     new_temperatures = temperatures
@@ -440,11 +446,9 @@ def get_temperature_by_country():
 
     return jsonify(temperatures_list), 200
 
-@app.route('/api/temperatures/', methods=['PUT'])
-def update_temperature():
+@app.route('/api/temperatures/<int:id>', methods=['PUT'])
+def update_temperature(id):
     data = request.get_json()
-
-    id = request.args.get('id')
 
     if not data or 'valoare' not in data:
         return jsonify({"error": "Bad request, missing fields"}), 400
@@ -473,11 +477,8 @@ def update_temperature():
 
     return jsonify({"message": "Temperature updated successfully"}), 200
 
-@app.route('/api/temperatures/', methods=['DELETE'])
-def delete_temperature():
-
-    id = request.args.get('id')
-
+@app.route('/api/temperatures/<int:id>', methods=['DELETE'])
+def delete_temperature(id):
     connection = get_db_connection()
     cursor = connection.cursor()
 
