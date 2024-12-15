@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # Serviciul pentru API REST
@@ -23,14 +23,14 @@ services:
       POSTGRES_PASSWORD: password
     volumes:
       - db_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql # Rulează scriptul SQL la inițializarea bazei de date
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
 
   # Serviciul pentru pgAdmin
   pgadmin:
     image: dpage/pgadmin4
     environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@example.com   # Adresa de email pentru autentificare
-      - PGADMIN_DEFAULT_PASSWORD=adminpassword   # Parola pentru autentificare
+      - PGADMIN_DEFAULT_EMAIL=admin@example.com # Adresa de email pentru autentificare
+      - PGADMIN_DEFAULT_PASSWORD=adminpassword # Parola pentru autentificare
     ports:
       - "8081:80"
     depends_on:
